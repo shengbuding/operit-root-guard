@@ -3,16 +3,17 @@
 > 适用：Operit + KernelSU 设备。目标：让 AI 的 root 操作「可回滚、可审计、防误删」。
 
 ## 一、文件清单
-- `root_guard.js` — 插件本体（单文件，即全部内容）
+- `root_guard-v1.0.0.toolpkg` — 插件本体（ToolPkg 格式，推荐）
 - `operit.daily.json` — KSU 最小权能模板（参考用）
 - 本说明
 
-## 二、安装（3 步）
-1. 把 `root_guard.js` 复制到：
+## 二、安装（推荐 ToolPkg）
+1. 把 `root_guard-v1.0.0.toolpkg` 复制到：
    `Android/data/com.ai.assistance.operit/files/packages/`
-   （用电脑文件管理器或手机上的文件管理器均可）
-2. 打开 Operit → 工具箱/包管理 → 找到「Root 安全护栏」→ 启用
+2. 打开 Operit → 工具箱/包管理 → 导入并启用「Root 安全护栏」
 3. 对 AI 说："调用 root_guard 的 guard_setup 和 guard_status"（首次安装脚本 + 环境自检）
+
+> 单文件版本（`root_guard.js`）：复制到同一目录 → 启用即可。
 
 ## 三、KSU 模板（可选但强烈建议）
 1. KSU 管理器 → App Profile → 导入 `operit.daily.json`
