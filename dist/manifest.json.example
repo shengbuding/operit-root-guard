@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "toolpkg_id": "com.shengbuding.root_guard",
+  "version": "1.0.0",
+  "api_version": "1.0.0",
+  "main": "main.js",
+  "author": ["shengbuding"],
+  "display_name": {
+    "zh": "Root 安全护栏",
+    "en": "Root Guard"
+  },
+  "description": {
+    "zh": "Root 操作安全护栏（防误删/防幻觉）：删除→回收站、修改前备份、幂等还原、环境自检、操作日志。",
+    "en": "Safety guardrails for AI-driven root operations: trash-first deletions, pre-modify backups, idempotent restore, environment check, audit logs."
+  },
+  "enabled_by_default": false,
+  "logo": "package_logo",
+  "resources": [
+    {
+      "key": "package_logo",
+      "path": "resources/logo.svg",
+      "mime": "image/svg+xml"
+    }
+  ],
+  "subpackages": [
+    {
+      "id": "root_guard",
+      "entry": "packages/root_guard.js",
+      "enabled_by_default": true,
+      "display_name": {
+        "zh": "Root 安全护栏",
+        "en": "Root Guard"
+      },
+      "description": {
+        "zh": "7 个安全工具：setup/status/init/trash/backup/restore/log",
+        "en": "7 safety tools: setup/status/init/trash/backup/restore/log"
+      }
+    }
+  ]
+}
