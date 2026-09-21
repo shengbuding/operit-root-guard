@@ -1,0 +1,13 @@
+{
+  "id": "operit.daily",
+  "name": "Operit 日常",
+  "description": "su 会话最小权能：文件读写/搜索/属主操作；无 SYS_ADMIN、SYS_BOOT、模块、裸块、网络管理；NO_NEW_PRIVS 防二次提权。适用于 Operit AI 的日常任务（含第三方 App 存档修改）。",
+  "author": "operit-setup",
+  "uid": 0,
+  "gid": 0,
+  "groups": ["ROOT", "READPROC"],
+  "capabilities": ["CAP_DAC_OVERRIDE", "CAP_DAC_READ_SEARCH", "CAP_FOWNER", "CAP_CHOWN"],
+  "context": "u:r:ksu:s0",
+  "namespace": "INHERITED",
+  "flags": ["NO_NEW_PRIVS"]
+}
