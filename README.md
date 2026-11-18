@@ -132,13 +132,36 @@ operit-root-guard/
 │   ├── ROOT_SAFETY_PROTOCOL.md        # 完整协议（分层/禁写/演习）
 │   └── operit.daily.json              # KSU 最小权能模板
 ├── packages/
-│   └── root_guard.js                  # 单文件版（手动部署）
+│   └── root_guard.js                  # 单文件版（构建产物）
+├── src/                               # 源码（构建入口）
+│   ├── root_guard.template.js         # 模板，含 __BUNDLE_JSON__ 占位符
+│   ├── manifest.json                  # 包描述
+│   ├── main.js
+│   ├── gen.js                         # shell → scripts.bundle.json
+│   ├── assemble.js                    # 模板 + bundle → root_guard.js
+│   ├── scripts/                       # 6 个 shell 脚本
+│   └── resources/logo.svg
+├── build.sh                           # 一键构建：./build.sh
 ├── CHANGELOG.md
 └── LICENSE
 ```
 
 **推荐用 `dist/` 里的 `.toolpkg`**：包含 manifest、内嵌脚本与图标，导入即可用。
 `packages/root_guard.js` 是同一代码的单文件形式，供需要直接放到包目录的用户使用。
+
+---
+
+## 从源码构建
+
+```bash
+./build.sh           # 版本号取自 src/root_guard.template.js
+./build.sh 1.2.1     # 或显式指定
+```
+
+构建流程：`src/scripts/*.sh` → `gen.js` 打包成 base64 bundle → `assemble.js` 注入模板 → 打 zip。
+产物输出到 `packages/root_guard.js` 与 `dist/root_guard-v<ver>.toolpkg`。
+
+构建可复现：相同源码两次构建 md5 一致（zip 时间戳已统一）。
 
 ---
 

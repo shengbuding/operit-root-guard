@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "toolpkg_id": "com.shengbuding.root_guard",
+  "version": "1.2.0",
+  "api_version": "1.0.0",
+  "min_supported_app_version": "1.12.2",
+  "main": "main.js",
+  "author": [
+    "shengbuding"
+  ],
+  "display_name": {
+    "zh": "Root 安全护栏",
+    "en": "Root Guard"
+  },
+  "description": {
+    "zh": "Root 操作安全护栏：删除进回收站、修改前备份、幂等还原、环境自检、操作日志；另有落盘判据、违规审计、回收站清单与占用统计。\n\n⚠️ 安装后必须手动启用子包：进入本包详情，打开「Root 安全护栏」子包开关，否则 guard_* 工具不会出现（重启 Operit 也会重新加载）。",
+    "en": "Safety guardrails for AI-driven root operations: trash-first deletions, pre-modify backups, idempotent restore, environment self-check, operation logs; plus path-policy locate/audit, trash listing and usage stats.\n\nNOTE: After installing, you MUST enable the subpackage manually — open this package's details and turn on the 'Root Guard' subpackage switch, otherwise the guard_* tools will not be registered."
+  },
+  "enabled_by_default": false,
+  "logo": "package_logo",
+  "resources": [
+    {
+      "key": "package_logo",
+      "path": "resources/logo.svg",
+      "mime": "image/svg+xml"
+    }
+  ],
+  "subpackages": [
+    {
+      "id": "root_guard",
+      "entry": "packages/root_guard.js",
+      "enabled_by_default": true,
+      "display_name": {
+        "zh": "Root 安全护栏",
+        "en": "Root Guard"
+      },
+      "description": {
+        "zh": "15 个工具：setup / status / init / trash / backup / restore / log / list / tier / locate / audit / config / purge / repair / selftest",
+        "en": "15 tools: setup / status / init / trash / backup / restore / log / list / tier / locate / audit / config / purge / repair / selftest"
+      }
+    }
+  ]
+}

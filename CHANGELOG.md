@@ -24,6 +24,7 @@
 ### 变更
 
 - 工具数 13 → 15。
+- **manifest 新增 `min_supported_app_version: 1.12.2`**：应用市场发布强制要求该字段，格式须为 `x.y.z`。子包机制与工具注册已在 1.12.2 实测验证，故以此为最低支持版本。
 - `guard-selftest.sh` 纳入 bundle，与其他脚本一起随 `guard_setup` 部署。
 - 路径归一化禁止使用 `readlink -f`：它会把 `/data/user/0` 改写为 `/data/data`，反而造成不一致。仅用纯字符串替换。
 
