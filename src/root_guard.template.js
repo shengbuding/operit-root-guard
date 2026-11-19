@@ -1,11 +1,11 @@
 /* METADATA
 {
     "name": "root_guard",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "display_name": { "zh": "Root 安全护栏", "en": "Root Guard" },
     "description": {
-        "zh": "Root 操作安全护栏 v1.2.0：回收站、修改前备份、还原、日志、环境自检；新增落盘判据/审计、回收站清单、占用统计。v1.2.0 修复 guard_purge 真删后账本未标记的问题。",
-        "en": "Root safety guardrails v1.2.0: trash, backup, restore, logging, env check; plus path-policy locate/audit, trash listing, usage stats. v1.2.0 fixes manifest not being marked after a real purge."
+        "zh": "Root 操作安全护栏 v1.2.1：回收站、修改前备份、还原、日志、环境自检；新增落盘判据/审计、回收站清单、占用统计。v1.2.1 修复 guard_purge 真删后账本未标记的问题。",
+        "en": "Root safety guardrails v1.2.1: trash, backup, restore, logging, env check; plus path-policy locate/audit, trash listing, usage stats. v1.2.1 fixes manifest not being marked after a real purge."
     },
     "enabledByDefault": false,
     "category": "System",
@@ -773,20 +773,78 @@ const rootGuard = (function () {
     async function guard_purge(params) {
         try {
             const dryRun = !(params && (params.confirm === true || params.confirm === "true"));
-            const all = !!(params && (params.all === true || params.all === "true"));
-            let days = 0;
-            if (params && params.older_than !== undefined && params.older_than !== null && String(params.older_than).length) {
-                days = parseInt(String(params.older_than), 10);
-            }
-            if (isNaN(days) || days < 0) days = -1;
 
-            if (!all && days < 0) {
+            // ---- 范围解析：必须显式提供，缺失或无效一律拒绝 ----
+            // 安全约束：绝不允许「未指定范围」退化为 days=0 而全量清理。
+            const rawAll = (params && params.all);
+            const hasAll = (rawAll === true || rawAll === "true" || rawAll === false || rawAll === "false");
+            const all = (rawAll === true || rawAll === "true");
+
+            const rawDays = (params && params.older_than);
+            const hasDays = !(rawDays === undefined || rawDays === null || String(rawDays).trim().length === 0);
+
+            // 互斥：同时给出 all 与 older_than 视为无效
+            if (all && hasDays) {
                 return {
-                    error: "需指定条件",
-                    hint: "older_than=<天数> 或 all=true；默认只预览不删，须 confirm=true 才真删",
-                    dry_run: dryRun
+                    error: "范围冲突",
+                    hint: "all=true 与 older_than 只能二选一，请只提供其中一个",
+                    dry_run: dryRun,
+                    scope: null,
+                    rejected_reason: "both_all_and_older_than"
                 };
             }
+
+            // 至少要有一个范围参数
+            if (!hasAll && !hasDays) {
+                return {
+                    error: "需显式指定清理范围",
+                    hint: "必须提供 older_than=<天数，>=0> 或 all=true；"
+                        + "本工具不会在缺少范围时推断默认值，以避免误删全部记录。"
+                        + "（预览同样需要范围；confirm=true 才真删）",
+                    dry_run: dryRun,
+                    scope: null,
+                    rejected_reason: "missing_scope"
+                };
+            }
+
+            let days = -1;
+            if (hasDays) {
+                const s = String(rawDays).trim();
+                // 只接受纯十进制非负整数
+                if (!/^\d+$/.test(s)) {
+                    return {
+                        error: "范围无效",
+                        hint: "older_than 必须是非负整数天数（例如 7）；收到：" + s,
+                        dry_run: dryRun,
+                        scope: null,
+                        rejected_reason: "invalid_older_than"
+                    };
+                }
+                days = parseInt(s, 10);
+                if (isNaN(days) || days < 0) {
+                    return {
+                        error: "范围无效",
+                        hint: "older_than 必须 >= 0",
+                        dry_run: dryRun,
+                        scope: null,
+                        rejected_reason: "invalid_older_than"
+                    };
+                }
+            }
+
+            // all=false 且未给 older_than → 无有效范围
+            if (!all && !hasDays) {
+                return {
+                    error: "需显式指定清理范围",
+                    hint: "all=false 时必须同时提供 older_than=<天数>",
+                    dry_run: dryRun,
+                    scope: null,
+                    rejected_reason: "all_false_without_older_than"
+                };
+            }
+
+            // 统一的范围描述，用于预览回显与审计日志
+            const scopeText = all ? "all" : ("older_than=" + days + "d");
 
             const roots = [TRASH_SYS, TRASH_USER];
             const nowMs = Date.now();
@@ -846,7 +904,8 @@ const rootGuard = (function () {
                 return {
                     dry_run: true,
                     note: "预览模式，未删除任何东西。确认后传 confirm=true 才真删",
-                    condition: all ? "all" : ("older_than=" + days + "d"),
+                    condition: scopeText,
+                    scope: scopeText,
                     will_delete: picked.length,
                     rejected: rejected.length,
                     items: picked.slice(0, 50),
@@ -865,7 +924,7 @@ const rootGuard = (function () {
                     done.push(it);
                     // 就地改写账本（不增行），使该条目不再被扫描/列出
                     it.manifest_marked = await markManifest(it.root, it.line_no, it.declared);
-                    await auditPurge(mts + "\tPURGED\t" + it.trashed + "\tcond=" + (all ? "all" : ("older_than " + days + "d")) + "\ttier=" + it.tier + "\tpurge");
+                    await auditPurge(mts + "\tPURGED\t" + it.trashed + "\tcond=" + scopeText + "\ttier=" + it.tier + "\tpurge");
                 } else {
                     it.err = rm.output;
                     failed.push(it);
@@ -880,7 +939,8 @@ const rootGuard = (function () {
 
             return {
                 dry_run: false,
-                condition: all ? "all" : ("older_than=" + days + "d"),
+                condition: scopeText,
+                scope: scopeText,
                 deleted: done.length,
                 failed: failed.length,
                 rejected: rejected.length,

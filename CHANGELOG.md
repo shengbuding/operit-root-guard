@@ -4,6 +4,33 @@
 
 ---
 
+## [1.2.1] - 2026-11-19
+
+安全修复：`guard_purge` 在未显式指定清理范围时会退化为全量清理。此项为应用市场审核打回项。
+
+### 修复
+
+- **`guard_purge` 范围缺失即全删**：原实现 `let days = 0` 作为默认值，仅当传入 `older_than` 时才覆盖；
+  因而在「不传任何参数」「只传 confirm」「`all=false`」「`older_than=""`」等情况下，
+  `days` 始终为 `0`，`ageDays >= 0` 恒成立，**一次确认即可永久清空两处回收站的全部记录**，
+  且预览中显示为 `older_than=0d` 看起来像是合理的显式条件。
+- 现改为：范围必须显式提供，缺失或无效一律拒绝执行并返回 `rejected_reason`，不再推断默认值。
+  - 无 `all` 且无 `older_than` → `missing_scope`
+  - `older_than` 非纯十进制非负整数（含空串、空白、`abc`、`-5`）→ `invalid_older_than`
+  - `all=true` 与 `older_than` 同时给出 → `both_all_and_older_than`（互斥）
+  - `all=false` 且无 `older_than` → `all_false_without_older_than`
+- 预览与执行结果统一新增 `scope` 字段，明确回显本次清理范围（`all` 或 `older_than=<n>d`）；
+  审计日志 `purge.log` 的 `cond=` 字段同样改用该范围文本。
+
+### 新增
+
+- 自测用例 **T17 guard_purge 范围校验**（10 项断言，纯 shell 实现，不依赖 node，真机可跑）。
+  覆盖上述全部拒绝分支、显式 `0` 与 `7` 的接受、`all` 与 `older_than` 互斥，
+  并额外断言「任何无范围输入都不得产出可执行 scope」。
+- 自测总数 50 → **60**。
+
+---
+
 ## [1.2.0] - 2026-11-18
 
 并发与审计正确性修复。本版本重点解决「工具报告成功、实际未生效」与「并发写账本丢行」两类隐性问题。

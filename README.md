@@ -28,7 +28,7 @@
 
 ### 步骤
 
-1. 下载插件包 `root_guard-v1.2.0.toolpkg`（见 [Releases](https://github.com/shengbuding/operit-root-guard/releases/latest)，或仓库 `dist/` 目录）
+1. 下载插件包 `root_guard-v1.2.1.toolpkg`（见 [Releases](https://github.com/shengbuding/operit-root-guard/releases/latest)，或仓库 `dist/` 目录）
 2. 打开 Operit → 包管理 → **导入包** → 选择该文件
 3. 导入后在包列表中**启用**「Root 安全护栏」
 4. 对 AI 说：「调用 root_guard 的 guard_setup 和 guard_status」
@@ -57,7 +57,7 @@
 | `guard_locate` | 落盘判据：给定用途返回合法落盘路径与分层 |
 | `guard_audit` | 审计违规落盘：扫描禁止区，列出可疑产物 |
 | `guard_config` | 读取/修改护栏配置（如回收站状态报告开关） |
-| `guard_purge` | 清理回收站：`older_than` / `all`，默认只预览，需 `confirm=true` 才真删；删后就地标记账本 |
+| `guard_purge` | 清理回收站：**必须显式指定 `older_than=<天>` 或 `all=true`**，缺失或无效一律拒绝；默认只预览，需 `confirm=true` 才真删；删后就地标记账本 |
 | `guard_repair` | 修复历史残留：账本有记录但实物已不存在的条目，批量标记为已清理。默认只预览，需 `confirm=true`，不删任何实物 |
 | `guard_selftest` | 运行内嵌自测（沙箱模式，不碰真实回收站）：50 项用例，含归一化、并发锁、PURGED 标记 |
 
@@ -125,7 +125,7 @@
 ```
 operit-root-guard/
 ├── dist/
-│   ├── root_guard-v1.2.0.toolpkg   # 插件本体（推荐安装方式）
+│   ├── root_guard-v1.2.1.toolpkg   # 插件本体（推荐安装方式）
 │   └── manifest.json.example          # manifest 参考
 ├── docs/
 │   ├── INSTALL.zh-CN.md               # 安装与使用说明

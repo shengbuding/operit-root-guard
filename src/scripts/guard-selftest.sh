@@ -231,6 +231,71 @@ else
   bad "PURGED test precondition trash failed rc=$rcp"
 fi
 
+step "T17 guard_purge 范围校验（缺失/无效必须拒绝）"
+# 与 root_guard.js 中 guard_purge 的范围解析保持一致的 shell 复现。
+# 返回 rejected_reason 或 scope，不依赖 node，真机 sh 可跑。
+purge_scope() {
+  # 参数：$1=hasAll(0/1) $2=allTrue(0/1) $3=hasDays(0/1) $4=rawDays
+  _ha="$1"; _at="$2"; _hd="$3"; _rd="$4"
+  if [ "$_at" = "1" ] && [ "$_hd" = "1" ]; then
+    printf 'both_all_and_older_than'; return
+  fi
+  if [ "$_ha" = "0" ] && [ "$_hd" = "0" ]; then
+    printf 'missing_scope'; return
+  fi
+  if [ "$_hd" = "1" ]; then
+    case "$_rd" in
+      ''|*[!0-9]*) printf 'invalid_older_than'; return ;;
+    esac
+    printf 'scope:older_than=%sd' "$_rd"; return
+  fi
+  if [ "$_at" = "0" ] && [ "$_hd" = "0" ]; then
+    printf 'all_false_without_older_than'; return
+  fi
+  if [ "$_at" = "1" ]; then
+    printf 'scope:all'; return
+  fi
+  printf 'all_false_without_older_than'
+}
+
+# 无参数 / 仅 confirm / all=false / 空串 / 空白
+r=$(purge_scope 0 0 0 ''); [ "$r" = "missing_scope" ] \
+  && ok "T17 无范围被拒绝(missing_scope)" || bad "T17 无范围未拒绝: $r"
+
+r=$(purge_scope 0 0 0 '   '); [ "$r" = "invalid_older_than" ] || [ "$r" = "missing_scope" ] \
+  && ok "T17 空白天数被拒绝" || bad "T17 空白未拒绝: $r"
+
+r=$(purge_scope 1 0 0 ''); [ "$r" = "all_false_without_older_than" ] \
+  && ok "T17 all=false 无范围被拒绝" || bad "T17 all=false 未拒绝: $r"
+
+r=$(purge_scope 0 0 1 'abc'); [ "$r" = "invalid_older_than" ] \
+  && ok "T17 非数字天数被拒绝" || bad "T17 非数字未拒绝: $r"
+
+r=$(purge_scope 0 0 1 '-5'); [ "$r" = "invalid_older_than" ] \
+  && ok "T17 负数天数被拒绝" || bad "T17 负数未拒绝: $r"
+
+r=$(purge_scope 0 0 1 '0'); [ "$r" = "scope:older_than=0d" ] \
+  && ok "T17 显式 0 天被接受" || bad "T17 显式 0 天应接受: $r"
+
+r=$(purge_scope 0 0 1 '7'); [ "$r" = "scope:older_than=7d" ] \
+  && ok "T17 显式 7 天被接受" || bad "T17 显式 7 天应接受: $r"
+
+r=$(purge_scope 1 1 0 ''); [ "$r" = "scope:all" ] \
+  && ok "T17 all=true 被接受" || bad "T17 all=true 应接受: $r"
+
+r=$(purge_scope 1 1 1 '7'); [ "$r" = "both_all_and_older_than" ] \
+  && ok "T17 all+older_than 冲突被拒绝" || bad "T17 冲突未拒绝: $r"
+
+# 关键回归断言：任何「无范围」输入都不得产出可执行 scope
+for args in "0 0 0 ''" "0 0 0 '   '" "1 0 0 ''" "0 0 1 'abc'" "0 0 1 '-5'"; do
+  eval "set -- $args"
+  r=$(purge_scope "$1" "$2" "$3" "$4")
+  case "$r" in
+    scope:*) bad "T17 无范围却产出可执行 scope: [$args] -> $r" ;;
+  esac
+done
+ok "T17 无范围输入均不产生可执行 scope"
+
 echo
 echo "===================="
 echo "PASS=$PASS FAIL=$FAIL"
