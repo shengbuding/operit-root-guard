@@ -53,6 +53,11 @@ if [ "$REASON" != "$(printf '%s' "$REASON" | tr -d '\t\r\n')" ]; then
   echo "拒绝: 原因含控制字符" >&2; exit 3
 fi
 
+# 日志分隔符注入（原因会写入 guard.log，含 | 会伪造列）
+case "$REASON" in
+  *'|'*) echo "拒绝: 原因含 '|'（日志分隔符）" >&2; exit 3 ;;
+esac
+
 # 规范化: 去尾部斜杠（保留根 /）
 while [ "$TARGET" != "/" ] && [ "${TARGET%/}" != "$TARGET" ]; do TARGET="${TARGET%/}"; done
 
@@ -66,6 +71,11 @@ esac
 if [ "$TARGET" != "$(printf '%s' "$TARGET" | tr -d '\t\r\n')" ]; then
   echo "拒绝: 路径含控制字符" >&2; exit 3
 fi
+
+# 日志分隔符注入（guard.log 用 ' | ' 分隔，路径含 | 会伪造列）
+case "$TARGET" in
+  *'|'*) echo "拒绝: 路径含 '|'（日志分隔符）: $TARGET" >&2; exit 3 ;;
+esac
 
 # 通配符（未展开）
 case "$TARGET" in
@@ -96,10 +106,37 @@ case "$TARGET" in
     echo "拒绝: 禁写清单/环境路径: $TARGET" >&2; exit 3 ;;
 esac
 
-# guard 工具链自身保护
-if [ -d "$TARGET" ] && [ -f "$TARGET/guard-backup.sh" ]; then
-  echo "拒绝: 目标目录含 guard 工具链，受保护: $TARGET" >&2; exit 3
+# guard 工具链自身保护（校验全部内嵌脚本，不能只查单个文件名）
+# 教训：早期只检查一个脚本名，含其余脚本的目录会被误判放行。
+if [ -d "$TARGET" ]; then
+  _hit=""
+  for _f in guard-init.sh guard-trash.sh guard-restore.sh guard-backup.sh guard-log.sh guard-selftest.sh; do
+    if [ -f "$TARGET/$_f" ]; then _hit="$_f"; break; fi
+  done
+  if [ -n "$_hit" ]; then
+    echo "拒绝: 目标目录含 guard 工具链($_hit)，受保护: $TARGET" >&2; exit 3
+  fi
+  # 结构特征：manifest.log 与 trash/ 或 backups/ 同时存在 → 是回收站
+  if [ -f "$TARGET/manifest.log" ]; then
+    if [ -d "$TARGET/trash" ] || [ -d "$TARGET/backups" ]; then
+      echo "拒绝: 目标目录具回收站结构，受保护: $TARGET" >&2; exit 3
+    fi
+  fi
 fi
+
+# 硬保护：不得操作护栏自身、kit 目录，也不得操作它们的父级
+if [ "$TARGET" = "$SYS_ROOT/kit" ] || [ "$TARGET" = "$USER_ROOT/kit" ]; then
+  echo "拒绝: 目标是 guard kit 目录: $TARGET" >&2; exit 3
+fi
+for _pr in "$SYS_ROOT" "$USER_ROOT"; do
+  [ -n "$_pr" ] || continue
+  if [ "$TARGET" = "$_pr" ]; then
+    echo "拒绝: 目标是护栏自身路径: $TARGET" >&2; exit 3
+  fi
+  case "$_pr" in
+    "$TARGET"/*) echo "拒绝: 目标是护栏父级: $TARGET" >&2; exit 3 ;;
+  esac
+done
 
 # 存在性 + 仅文件
 if [ ! -e "$TARGET" ] && [ ! -L "$TARGET" ]; then

@@ -28,7 +28,7 @@
 
 ### 步骤
 
-1. 下载插件包 `root_guard-v1.2.1.toolpkg`（见 [Releases](https://github.com/shengbuding/operit-root-guard/releases/latest)，或仓库 `dist/` 目录）
+1. 下载插件包 `root_guard-v1.2.2.toolpkg`（见 [Releases](https://github.com/shengbuding/operit-root-guard/releases/latest)，或仓库 `dist/` 目录）
 2. 打开 Operit → 包管理 → **导入包** → 选择该文件
 3. 导入后在包列表中**启用**「Root 安全护栏」
 4. 对 AI 说：「调用 root_guard 的 guard_setup 和 guard_status」
@@ -48,7 +48,7 @@
 | `guard_setup` | 安装/更新：释放内嵌脚本到 `guard_data/kit`。`force=true` 强制重装并做语法校验 |
 | `guard_status` | 环境自检：root 通道、权能、数据通道、回收站状态与占用 |
 | `guard_init` | 初始化双回收站（系统层 + 用户层），幂等 |
-| `guard_trash` | 删除→回收站（代替裸 `rm`），必须填原因 |
+| `guard_trash` | 删除→回收站（代替裸 `rm`），必须填原因；**目标为目录时须追加 `confirm_dir=true`** |
 | `guard_backup` | 修改前备份：副本进 `backups/`，原件不动 |
 | `guard_restore` | 还原：`trash/` 为移动还原，`backups/` 为覆盖还原 |
 | `guard_log` | 写一条操作日志 |
@@ -125,7 +125,7 @@
 ```
 operit-root-guard/
 ├── dist/
-│   ├── root_guard-v1.2.1.toolpkg   # 插件本体（推荐安装方式）
+│   ├── root_guard-v1.2.2.toolpkg   # 插件本体（推荐安装方式）
 │   └── manifest.json.example          # manifest 参考
 ├── docs/
 │   ├── INSTALL.zh-CN.md               # 安装与使用说明

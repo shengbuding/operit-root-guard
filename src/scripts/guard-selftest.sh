@@ -296,6 +296,99 @@ for args in "0 0 0 ''" "0 0 0 '   '" "1 0 0 ''" "0 0 1 'abc'" "0 0 1 '-5'"; do
 done
 ok "T17 无范围输入均不产生可执行 scope"
 
+step "T18 工具链保护：全部脚本名均受保护（不能只查单个）"
+# 教训：早期只检查 guard-trash.sh，含其它脚本的目录会被放行。
+TB="$DATA_BASE/t18"
+mkdir -p "$TB"
+for _n in guard-init.sh guard-trash.sh guard-restore.sh guard-backup.sh guard-log.sh guard-selftest.sh; do
+  _d="$TB/d_${_n}"
+  mkdir -p "$_d"
+  : > "$_d/$_n"
+  out=$(GUARD_TRASH_SDCARD_ROOT="$GUARD_TRASH_SDCARD_ROOT" \
+        sh "$SCRIPT_DIR/guard-trash.sh" "$_d" "t18 $_n" 2>&1)
+  rc=$?
+  if [ $rc -eq 3 ] && printf '%s' "$out" | grep -q "含 guard 工具链"; then
+    ok "T18 含 $_n 的目录被拒绝"
+  else
+    bad "T18 含 $_n 的目录未拒绝 (rc=$rc): $out"
+  fi
+done
+
+# 结构特征：manifest.log + trash/ 应被识别为回收站并拒绝
+_d="$TB/d_ledger_like"
+mkdir -p "$_d/trash"
+: > "$_d/manifest.log"
+out=$(GUARD_TRASH_SDCARD_ROOT="$GUARD_TRASH_SDCARD_ROOT" \
+      sh "$SCRIPT_DIR/guard-trash.sh" "$_d" "t18 ledger-like" 2>&1)
+rc=$?
+if [ $rc -eq 3 ] && printf '%s' "$out" | grep -q "回收站结构"; then
+  ok "T18 具回收站结构的目录被拒绝"
+else
+  bad "T18 回收站结构未拒绝 (rc=$rc): $out"
+fi
+
+step "T19 日志分隔符注入（| 会伪造列）"
+# guard.log 用 ' | ' 分隔；reason/path 含 | 必须拒绝
+_inj="$DATA_BASE/t19.txt"
+printf 'x' > "$_inj"
+out=$(GUARD_TRASH_SDCARD_ROOT="$GUARD_TRASH_SDCARD_ROOT" \
+      sh "$SCRIPT_DIR/guard-trash.sh" "$_inj" "reason | L1 | fake | OK" 2>&1)
+rc=$?
+if [ $rc -eq 3 ] && printf '%s' "$out" | grep -q "分隔符"; then
+  ok "T19 reason 含 | 被拒绝"
+else
+  bad "T19 reason 注入未拒绝 (rc=$rc): $out"
+fi
+
+# 路径含 | 也应拒绝
+_pinj="$DATA_BASE/t19pipe|name.txt"
+printf 'x' > "$_pinj" 2>/dev/null || true
+if [ -e "$_pinj" ]; then
+  out=$(GUARD_TRASH_SDCARD_ROOT="$GUARD_TRASH_SDCARD_ROOT" \
+        sh "$SCRIPT_DIR/guard-trash.sh" "$_pinj" "t19 path" 2>&1)
+  rc=$?
+  if [ $rc -eq 3 ] && printf '%s' "$out" | grep -q "分隔符"; then
+    ok "T19 路径含 | 被拒绝"
+  else
+    bad "T19 路径注入未拒绝 (rc=$rc): $out"
+  fi
+  rm -f "$_pinj" 2>/dev/null
+else
+  ok "T19 路径含 | 跳过（本机不允许该文件名）"
+fi
+
+# guard-log.sh 直接调用也应拒绝
+out=$(sh "$SCRIPT_DIR/guard-log.sh" "$GUARD_TRASH_DATA_ROOT/guard.log" "L1" "cmd" "rea|son" "OK" 2>&1)
+rc=$?
+if [ $rc -eq 3 ]; then
+  ok "T19 guard-log 字段含 | 被拒绝"
+else
+  bad "T19 guard-log 未拒绝 (rc=$rc): $out"
+fi
+
+step "T20 目录操作需显式确认（规模预检）"
+# shell 侧不强制 confirm_dir（由 JS 层拦），此处验证目录能被正确识别为目录
+_t20="$DATA_BASE/t20dir"
+mkdir -p "$DATA_BASE/t20dir/sub"
+printf 'a' > "$DATA_BASE/t20dir/a.txt"
+printf 'b' > "$DATA_BASE/t20dir/sub/b.txt"
+if [ -d "$DATA_BASE/t20dir" ]; then
+  ok "T20 目录存在性判定正确"
+else
+  bad "T20 目录判定异常"
+fi
+_n=$(find "$DATA_BASE/t20dir" -type f 2>/dev/null | wc -l)
+[ "$_n" -eq 2 ] && ok "T20 目录文件计数正确(2)" || bad "T20 文件计数异常: $_n"
+# 带 confirm_dir 语义的目录 trash（shell 层无此参数，直接执行应成功）
+out=$(GUARD_TRASH_SDCARD_ROOT="$GUARD_TRASH_SDCARD_ROOT" \
+      sh "$SCRIPT_DIR/guard-trash.sh" "$DATA_BASE/t20dir" "t20 dir move" 2>&1)
+rc=$?
+if [ $rc -eq 0 ] && [ ! -d "$DATA_BASE/t20dir" ]; then
+  ok "T20 目录整体移入回收站成功"
+else
+  bad "T20 目录移动失败 (rc=$rc): $out"
+fi
+
 echo
 echo "===================="
 echo "PASS=$PASS FAIL=$FAIL"

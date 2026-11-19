@@ -59,6 +59,11 @@ if [ "$T" != "$(printf '%s' "$T" | tr -d '\t\r\n')" ]; then
   echo "拒绝: 路径含控制字符" >&2; exit 3
 fi
 
+# 日志分隔符注入
+case "$T" in
+  *'|'*) echo "拒绝: 路径含 '|'（日志分隔符）: $T" >&2; exit 3 ;;
+esac
+
 # normalize BEFORE the case check: prefix compare must use one spelling
 T_RAW="$T"
 T="$(norm_path "$T")"

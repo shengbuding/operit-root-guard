@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "toolpkg_id": "com.shengbuding.root_guard",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "api_version": "1.0.0",
   "min_supported_app_version": "1.12.2",
   "main": "main.js",

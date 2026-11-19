@@ -1,11 +1,11 @@
 /* METADATA
 {
     "name": "root_guard",
-    "version": "1.2.1",
+    "version": "1.2.2",
     "display_name": { "zh": "Root 安全护栏", "en": "Root Guard" },
     "description": {
-        "zh": "Root 操作安全护栏 v1.2.1：回收站、修改前备份、还原、日志、环境自检；新增落盘判据/审计、回收站清单、占用统计。v1.2.1 修复 guard_purge 真删后账本未标记的问题。",
-        "en": "Root safety guardrails v1.2.1: trash, backup, restore, logging, env check; plus path-policy locate/audit, trash listing, usage stats. v1.2.1 fixes manifest not being marked after a real purge."
+        "zh": "Root 操作安全护栏 v1.2.2：回收站、修改前备份、还原、日志、环境自检；新增落盘判据/审计、回收站清单、占用统计。v1.2.2 修复 guard_purge 真删后账本未标记的问题。",
+        "en": "Root safety guardrails v1.2.2: trash, backup, restore, logging, env check; plus path-policy locate/audit, trash listing, usage stats. v1.2.2 fixes manifest not being marked after a real purge."
     },
     "enabledByDefault": false,
     "category": "System",
@@ -33,7 +33,8 @@
             "parameters": [
                 { "name": "target", "description": { "zh": "目标绝对路径", "en": "Absolute path" }, "type": "string", "required": true },
                 { "name": "reason", "description": { "zh": "删除原因", "en": "Reason" }, "type": "string", "required": true },
-                { "name": "silent", "description": { "zh": "单次关闭回收站状态报告", "en": "Suppress trash status for this call" }, "type": "boolean", "required": false }
+                { "name": "silent", "description": { "zh": "单次关闭回收站状态报告", "en": "Suppress trash status for this call" }, "type": "boolean", "required": false },
+                { "name": "confirm_dir", "description": { "zh": "目标为目录时必须显式传 true（目录会整棵树一次性搬入回收站）", "en": "Required true when target is a directory (the whole tree is moved into trash at once)" }, "type": "boolean", "required": false }
             ]
         },
         {
@@ -103,11 +104,11 @@
         },
         {
             "name": "guard_purge",
-            "description": { "zh": "清理回收站（按天数或全部）。默认只预览不删，须 confirm=true 才真删；删后将账本对应行就地标记为 PURGED（行数不变）。", "en": "Purge trash by age or all. Dry-run by default; requires confirm=true. Marks the matching ledger line as PURGED in place (no new lines)." },
+            "description": { "zh": "清理回收站。【必须显式指定 older_than=<天> 或 all=true，缺失或无效一律拒绝】默认只预览不删，须 confirm=true 才真删；删后将账本对应行就地标记为 PURGED（行数不变）。返回含 scope 字段明确回显本次范围。", "en": "Purge trash. [A scope MUST be given explicitly via older_than=<days> or all=true; missing or invalid scope is rejected] Dry-run by default; requires confirm=true. Marks matching ledger lines as PURGED in place. Result includes a scope field." },
             "parameters": [
-                { "name": "older_than", "description": { "zh": "删除入回收站超过 N 天的条目", "en": "Purge entries older than N days" }, "type": "number", "required": false },
-                { "name": "all", "description": { "zh": "清空全部（与 older_than 二选一）", "en": "Purge everything" }, "type": "boolean", "required": false },
-                { "name": "confirm", "description": { "zh": "true=真正执行删除；不传或 false=只预览", "en": "true = really delete; omitted/false = preview only" }, "type": "boolean", "required": false }
+                { "name": "older_than", "description": { "zh": "【必填项之一】删除入回收站超过 N 天的条目（纯非负整数）。必须与 all=true 二选一，两项都不给会被拒绝", "en": "[one of required] Purge entries older than N days (non-negative integer). Must be supplied unless all=true; omitting both is rejected" }, "type": "number", "required": false },
+                { "name": "all", "description": { "zh": "【必填项之一】清空全部。与 older_than 互斥，同时给出会被拒绝", "en": "[one of required] Purge everything. Mutually exclusive with older_than; supplying both is rejected" }, "type": "boolean", "required": false },
+                { "name": "confirm", "description": { "zh": "true=真正执行删除；不传或 false=只预览（预览同样需要范围）", "en": "true = really delete; omitted/false = preview only (preview also requires a scope)" }, "type": "boolean", "required": false }
             ]
         },
         {
@@ -119,7 +120,7 @@
         },
         {
             "name": "guard_selftest",
-            "description": { "zh": "运行内嵌自测（沙箱模式，不碰真实回收站）：验证 init / trash / restore / backup / 拒绝用例 / 归一化 / 并发锁 / PURGED 标记，共 50 项。", "en": "Run embedded self-test (sandbox mode, does not touch real trash): 50 checks covering init/trash/restore/backup/reject cases/normalization/concurrency lock/PURGED marking." },
+            "description": { "zh": "运行内嵌自测（沙箱模式，不碰真实回收站）：验证 init / trash / restore / backup / 拒绝用例 / 归一化 / 并发锁 / PURGED 标记 / purge 范围校验等，共 73 项。", "en": "Run embedded self-test (sandbox mode, does not touch real trash): 73 checks covering init/trash/restore/backup/reject cases/normalization/concurrency lock/PURGED marking/purge scope validation." },
             "parameters": []
         }
     ]
@@ -298,6 +299,24 @@ const rootGuard = (function () {
         } catch (e) { return { error: String((e && e.message) || e) }; }
     }
 
+    // 目录规模预检：目录级操作前统计文件数与体积，供调用方判断
+    async function dirStat(p) {
+        const r = await runShell(
+            "[ -d " + sq(p) + " ] || { echo __NOTDIR__; exit 0; }; " +
+            "n=$(find " + sq(p) + " -type f 2>/dev/null | wc -l); " +
+            "s=$(du -sk " + sq(p) + " 2>/dev/null | cut -f1); " +
+            "echo \"N=$n S=$s\"");
+        const t = (r.output || "").trim();
+        if (t.indexOf("__NOTDIR__") >= 0) return { is_dir: false };
+        const mn = t.match(/N=(\d+)/);
+        const ms = t.match(/S=(\d+)/);
+        return {
+            is_dir: true,
+            files: mn ? parseInt(mn[1], 10) : -1,
+            size_kb: ms ? parseInt(ms[1], 10) : -1
+        };
+    }
+
     // 确保 kit 就绪；失败时返回错误对象（而非静默忽略）
     async function ensureKit(toolName) {
         const st = await guard_setup();
@@ -359,7 +378,24 @@ const rootGuard = (function () {
             const target = params && params.target ? String(params.target) : "";
             const reason = params && params.reason ? String(params.reason) : "";
             const silent = !!(params && (params.silent === true || params.silent === "true"));
+            const confirmDir = !!(params && (params.confirm_dir === true || params.confirm_dir === "true"));
             if (!target || !reason) { return { error: "需要 target 与 reason" }; }
+
+            // 目录级操作规模预检：目录会整棵树一次性搬入回收站（同卷为原子 rename）
+            const ds = await dirStat(target);
+            if (ds.is_dir && !confirmDir) {
+                return {
+                    error: "目标是目录，需要显式确认",
+                    hint: "目录会连同其全部内容一次性移入回收站。确认无误请追加 confirm_dir=true 重试。",
+                    requires_confirm_dir: true,
+                    dir_preview: {
+                        path: target,
+                        files: ds.files,
+                        size_kb: ds.size_kb
+                    }
+                };
+            }
+
             const r = await runShell("sh " + sq(KIT_DIR + "/guard-trash.sh") + " " + sq(target) + " " + sq(reason));
             const out = { exitCode: r.exitCode, output: r.output.trim() };
             if (r.exitCode === 0) out.trash_status = await statusFor(silent);
@@ -430,7 +466,11 @@ const rootGuard = (function () {
     async function guard_list(params) {
         try {
             const limit = params && params.limit ? parseInt(String(params.limit), 10) : 20;
-            const lim = (isNaN(limit) || limit <= 0) ? 20 : limit;
+            // 上界保护：避免超大 limit 撑爆返回体/上下文
+            const LIMIT_MAX = 500;
+            let lim = (isNaN(limit) || limit <= 0) ? 20 : limit;
+            let limit_clamped = false;
+            if (lim > LIMIT_MAX) { lim = LIMIT_MAX; limit_clamped = true; }
             const r = await runShell(
                 "cat " + sq(TRASH_SYS + "/manifest.log") + " 2>/dev/null; " +
                 "cat " + sq(TRASH_USER + "/manifest.log") + " 2>/dev/null; echo"
@@ -455,7 +495,13 @@ const rootGuard = (function () {
             }
             rows.sort(function (a, b) { return a.time < b.time ? 1 : (a.time > b.time ? -1 : 0); });
             const out = rows.slice(0, lim);
-            return { total: rows.length, shown: out.length, entries: out };
+            return {
+                total: rows.length,
+                shown: out.length,
+                limit: lim,
+                limit_clamped: limit_clamped,
+                entries: out
+            };
         } catch (e) { return { error: String((e && e.message) || e) }; }
     }
 
@@ -538,7 +584,11 @@ const rootGuard = (function () {
     async function guard_audit(params) {
         try {
             const maxPer = params && params.max_per_dir ? parseInt(String(params.max_per_dir), 10) : 30;
-            const lim = (isNaN(maxPer) || maxPer <= 0) ? 30 : maxPer;
+            // 上界保护
+            const MAXPER_MAX = 200;
+            let lim = (isNaN(maxPer) || maxPer <= 0) ? 30 : maxPer;
+            let max_per_dir_clamped = false;
+            if (lim > MAXPER_MAX) { lim = MAXPER_MAX; max_per_dir_clamped = true; }
             const result = [];
             for (let i = 0; i < FORBIDDEN.length; i++) {
                 const d = FORBIDDEN[i];
@@ -557,6 +607,8 @@ const rootGuard = (function () {
             return {
                 note: "禁止区用于发现 AI 产物散落；系统/其他应用的合法内容请勿误判。",
                 recommended: SCRATCH,
+                max_per_dir: lim,
+                max_per_dir_clamped: max_per_dir_clamped,
                 scan: result
             };
         } catch (e) { return { error: String((e && e.message) || e) }; }
